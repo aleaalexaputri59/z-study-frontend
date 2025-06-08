@@ -38,6 +38,7 @@ const AppRoutes: React.FC = () => {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/chat" element={<ChatPage />} />
+          <Route path="/chat/:conversationId" element={<ChatPage />} />
           <Route path="/topup" element={<TopupPage />} />
           <Route path="/code-assistant" element={<CodeAssistantPage />} />
         </Route>
