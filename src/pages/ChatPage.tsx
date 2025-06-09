@@ -34,7 +34,7 @@ import { getModels, getAllModels, chatCompletionStream } from "../services/llm";
 import {
   getConversationChats,
   editMessage,
-  regenerateResponse,
+  generateResponse,
   switchToVersion,
   getChatVersions,
 } from "../services/conversations";
@@ -71,6 +71,7 @@ const ChatPage: React.FC = () => {
   >(null);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [generatingResponse, setGeneratingResponse] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -123,21 +124,21 @@ const ChatPage: React.FC = () => {
         activeOnly: true,
       });
 
-      if (response) {
+      if (response.success && response.data) {
         // Transform the API response to match our ChatMessage format
-        const chatMessages: ChatMessageType[] = response.results.map(
+        const chatMessages: ChatMessageType[] = response.data.results.map(
           (chat) => ({
             chatId: chat.chatId,
             role: chat.role as "user" | "assistant",
             content: chat.content,
             messageIndex: chat.messageIndex,
             isActive: chat.isActive,
-            isEdited: chat.isEdited,
             versionNumber: chat.versionNumber,
             isCurrentVersion: chat.isCurrentVersion,
             hasMultipleVersions: chat.hasMultipleVersions,
             totalVersions: chat.totalVersions,
             availableVersions: chat.availableVersions,
+            editInfo: chat.editInfo,
             createdAt: chat.createdAt,
             updatedAt: chat.updatedAt,
           })
@@ -145,7 +146,7 @@ const ChatPage: React.FC = () => {
 
         setMessages(chatMessages);
 
-        // Set conversation info (you might need to get this from another API call)
+        // Set conversation info
         setSelectedConversation({
           conversationId: convId,
           title: `Conversation ${convId.slice(0, 8)}...`,
@@ -187,7 +188,7 @@ const ChatPage: React.FC = () => {
   const prepareChatHistory = (): ChatMessageType[] => {
     return messages.map((msg) => ({
       ...msg,
-      updated: msg.isEdited || false,
+      updated: msg.editInfo?.isEdited || false,
     }));
   };
 
@@ -219,7 +220,7 @@ const ChatPage: React.FC = () => {
     const userMessage: ChatMessageType = {
       role: "user",
       content: messageContent,
-      isEdited: false,
+      editInfo: { canEdit: true, isEdited: false },
     };
 
     setLoading(true);
@@ -273,7 +274,7 @@ const ChatPage: React.FC = () => {
                 versionNumber: 1,
                 totalVersions: 1,
                 hasMultipleVersions: false,
-                isEdited: false,
+                editInfo: { canEdit: false, isEdited: false },
               };
 
               setMessages((prev) => [
@@ -288,7 +289,7 @@ const ChatPage: React.FC = () => {
                 {
                   role: "assistant",
                   content: accumulatedContent,
-                  isEdited: false,
+                  editInfo: { canEdit: false, isEdited: false },
                 },
               ]);
             }
@@ -371,79 +372,52 @@ const ChatPage: React.FC = () => {
     await sendMessage(input, selectedConversation?.conversationId);
   };
 
-  const handleEditMessage = async (
-    newContent: string,
-    model: string
-  ) => {
-    // Find the user message that was edited
-    const userMessageIndex = messages.findIndex(msg => msg.role === "user");
-    if (userMessageIndex === -1) return;
-
-    const userMessage = messages[userMessageIndex];
-    if (!userMessage?.chatId) {
-      console.error("User message chatId not found");
+  const handleEditMessage = async (messageIndex: number, newContent: string) => {
+    const message = messages[messageIndex];
+    if (!message?.chatId) {
+      console.error("Message chatId not found");
       return;
     }
 
     try {
       setLoading(true);
-      setStreamedResponse("");
       setError("");
 
-      console.log("Editing message with chatId:", userMessage.chatId);
+      console.log("Editing message with chatId:", message.chatId);
       console.log("New content:", newContent);
-      console.log("Model:", model);
 
       // Call edit API
-      const editResponse = await editMessage(userMessage.chatId, {
+      const editResponse = await editMessage(message.chatId, {
         content: newContent,
-        model: model,
       });
 
       console.log("Edit response:", editResponse);
 
       if (editResponse.success) {
-        // Update the messages with the edited user message and new assistant response
+        // Update the message with edited content and version info
         const updatedMessages = [...messages];
-
-        // Update user message with edited content and version info
-        updatedMessages[userMessageIndex] = {
-          ...editResponse.data.editedUserChat,
-          role: "user",
+        
+        updatedMessages[messageIndex] = {
+          ...message,
           content: newContent,
-          isEdited: true,
-          messageIndex: userMessageIndex,
-          versionNumber: editResponse.data.editedUserChat.versionNumber || 1,
-          hasMultipleVersions: (editResponse.data.editedUserChat.totalVersions || 1) > 1,
-          totalVersions: editResponse.data.editedUserChat.totalVersions || 1,
+          versionNumber: editResponse.data.editedMessage.versionNumber,
+          hasMultipleVersions: editResponse.data.editedMessage.hasMultipleVersions,
+          totalVersions: editResponse.data.editedMessage.totalVersions,
+          availableVersions: editResponse.data.editedMessage.availableVersions,
+          editInfo: {
+            canEdit: true,
+            isEdited: true,
+            lastEditedAt: new Date().toISOString(),
+          },
         };
 
-        // Find and update the assistant message that follows
-        const assistantMessageIndex = userMessageIndex + 1;
-        if (assistantMessageIndex < updatedMessages.length && updatedMessages[assistantMessageIndex].role === "assistant") {
-          updatedMessages[assistantMessageIndex] = {
-            ...editResponse.data.newAssistantChat,
-            role: "assistant",
-            messageIndex: assistantMessageIndex,
-            versionNumber: editResponse.data.newAssistantChat.versionNumber || 1,
-            hasMultipleVersions: (editResponse.data.newAssistantChat.totalVersions || 1) > 1,
-            totalVersions: editResponse.data.newAssistantChat.totalVersions || 1,
-          };
-        } else {
-          // If no assistant message follows, add the new one
-          const newAssistantMessage: ChatMessageType = {
-            ...editResponse.data.newAssistantChat,
-            role: "assistant",
-            messageIndex: assistantMessageIndex,
-            versionNumber: 1,
-            hasMultipleVersions: false,
-            totalVersions: 1,
-          };
-          updatedMessages.splice(assistantMessageIndex, 0, newAssistantMessage);
+        // Remove subsequent messages if they were deactivated
+        if (editResponse.data.branchInfo.deactivatedMessagesCount > 0) {
+          updatedMessages.splice(messageIndex + 1);
         }
 
         setMessages(updatedMessages);
-        setSnackbarMessage("Message edited and response regenerated successfully");
+        setSnackbarMessage(editResponse.data.branchInfo.message);
         setSnackbarOpen(true);
         setRefreshHistoryTrigger((prev) => prev + 1);
       }
@@ -457,38 +431,105 @@ const ChatPage: React.FC = () => {
     }
   };
 
-  const handleRegenerateFromMessage = async (
-    messageIndex: number,
-    model: string
-  ) => {
+  const handleGenerateResponse = async (messageIndex: number, model: string) => {
     const message = messages[messageIndex];
-    if (!message?.chatId) return;
+    if (!message?.chatId || message.role !== 'user') return;
 
     try {
-      setLoading(true);
-      const response = await regenerateResponse(message.chatId, model);
+      setGeneratingResponse(true);
+      setStreamedResponse("");
+      setError("");
 
-      if (response.success) {
-        // Update the message with new version info
-        const updatedMessages = [...messages];
-        updatedMessages[messageIndex] = {
-          ...response.data.newAssistantChat,
-          messageIndex: messageIndex,
-          versionNumber: response.data.newAssistantChat.versionNumber || 1,
-          hasMultipleVersions:
-            (response.data.newAssistantChat.totalVersions || 1) > 1,
-          totalVersions: response.data.newAssistantChat.totalVersions || 1,
-        };
+      const stream = await generateResponse(message.chatId, model);
+      if (!stream) throw new Error("Failed to initialize stream");
 
-        setMessages(updatedMessages);
-        setSnackbarMessage("Response regenerated");
-        setSnackbarOpen(true);
-        setRefreshHistoryTrigger((prev) => prev + 1);
-      }
+      const reader = stream.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      let accumulatedContent = "";
+      let responseData: any = null;
+
+      const processStream = async () => {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            if (responseData?.assistantMessage) {
+              const newAssistantMessage: ChatMessageType = {
+                role: "assistant",
+                content: accumulatedContent,
+                chatId: responseData.assistantMessage.chatId,
+                messageIndex: messageIndex + 1,
+                isActive: true,
+                isCurrentVersion: true,
+                versionNumber: responseData.assistantMessage.versionNumber,
+                totalVersions: responseData.assistantMessage.totalVersions,
+                hasMultipleVersions: responseData.assistantMessage.hasMultipleVersions,
+                editInfo: { canEdit: false, isEdited: false },
+              };
+
+              // Add or replace the assistant message
+              const updatedMessages = [...messages];
+              if (messageIndex + 1 < updatedMessages.length && updatedMessages[messageIndex + 1].role === 'assistant') {
+                updatedMessages[messageIndex + 1] = newAssistantMessage;
+              } else {
+                updatedMessages.splice(messageIndex + 1, 0, newAssistantMessage);
+              }
+
+              setMessages(updatedMessages);
+            }
+
+            setStreamedResponse("");
+            setSnackbarMessage("Response generated successfully");
+            setSnackbarOpen(true);
+            setRefreshHistoryTrigger((prev) => prev + 1);
+            break;
+          }
+
+          const chunk = decoder.decode(value, { stream: true });
+          buffer += chunk;
+
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              let jsonStr = line.slice(5).trim();
+
+              if (jsonStr.startsWith("data: "))
+                jsonStr = jsonStr.slice(5).trim();
+
+              if (jsonStr === "[DONE]") continue;
+
+              try {
+                const data = JSON.parse(jsonStr);
+
+                if (data.choices !== null) {
+                  if (data.choices?.[0]?.delta?.content) {
+                    accumulatedContent += data.choices[0].delta.content;
+                    setStreamedResponse(
+                      (prev) => prev + data.choices[0].delta.content
+                    );
+                  }
+                }
+
+                if (data.usage !== null || data.assistantMessage !== null) {
+                  responseData = data;
+                }
+              } catch (e) {
+                console.error("Error parsing JSON:", e);
+              }
+            }
+          }
+        }
+      };
+
+      await processStream();
     } catch (error: any) {
-      setError(error.message || "Failed to regenerate response");
+      setError(error.message || "Failed to generate response");
+      setSnackbarMessage("Failed to generate response");
+      setSnackbarOpen(true);
     } finally {
-      setLoading(false);
+      setGeneratingResponse(false);
     }
   };
 
@@ -513,7 +554,7 @@ const ChatPage: React.FC = () => {
         );
 
         setMessages(newMessages);
-        setSnackbarMessage(`Switched to version ${versionNumber}`);
+        setSnackbarMessage(response.data.switchInfo.message);
         setSnackbarOpen(true);
         setRefreshHistoryTrigger((prev) => prev + 1);
       }
@@ -537,8 +578,9 @@ const ChatPage: React.FC = () => {
           ...updatedMessages[messageIndex],
           availableVersions: response.data.versions.map((v) => ({
             versionNumber: v.versionNumber,
-            versionId: v.versionId,
+            isCurrentVersion: v.isCurrentVersion,
             content: v.content,
+            contentPreview: v.contentPreview,
             createdAt: v.createdAt,
           })),
         };
@@ -708,7 +750,7 @@ const ChatPage: React.FC = () => {
                     selectedModel={selectedModel}
                     onChange={handleModelChange}
                     loading={loadingModels}
-                    disabled={loading}
+                    disabled={loading || generatingResponse}
                   />
                 </Box>
                 {selectedModelName && (
@@ -860,20 +902,18 @@ const ChatPage: React.FC = () => {
                           showHeader={true}
                           timestamp={formatTimestamp(index)}
                           messageIndex={index}
-                          onEditMessage={(content, model) =>
-                            handleEditMessage(content, model)
+                          onEditMessage={(content) =>
+                            handleEditMessage(index, content)
                           }
-                          onRegenerateFromMessage={(model) =>
-                            handleRegenerateFromMessage(index, model)
+                          onGenerateResponse={(model) =>
+                            handleGenerateResponse(index, model)
                           }
                           onSwitchVersion={(versionNumber) =>
                             handleSwitchVersion(index, versionNumber)
                           }
                           onViewVersions={() => handleViewVersions(index)}
-                          canRegenerate={
-                            index === messages.length - 1 ||
-                            messages[index + 1]?.role === "assistant"
-                          }
+                          canEdit={message.role === 'user' && message.editInfo?.canEdit}
+                          canGenerate={message.role === 'user'}
                           availableModels={availableModelsForSelect}
                         />
                       ))}
@@ -883,9 +923,10 @@ const ChatPage: React.FC = () => {
                           message={{
                             role: "assistant",
                             content: streamedResponse,
+                            editInfo: { canEdit: false, isEdited: false },
                           }}
                           isStreaming={true}
-                          loading={loading}
+                          loading={loading || generatingResponse}
                           model={selectedModelName}
                           showHeader={true}
                           timestamp="Now"
@@ -907,7 +948,7 @@ const ChatPage: React.FC = () => {
                     onChange={(e) => setInput(e.target.value)}
                     onKeyPress={handleKeyPress}
                     placeholder="Type your message..."
-                    disabled={loading || !selectedModel}
+                    disabled={loading || generatingResponse || !selectedModel}
                     sx={{ flexGrow: 1 }}
                   />
 
@@ -915,7 +956,7 @@ const ChatPage: React.FC = () => {
                     <IconButton
                       onClick={clearChat}
                       disabled={
-                        loading || (messages.length === 0 && !streamedResponse)
+                        loading || generatingResponse || (messages.length === 0 && !streamedResponse)
                       }
                     >
                       <RefreshCw size={20} />
@@ -925,17 +966,17 @@ const ChatPage: React.FC = () => {
                   <Button
                     variant="contained"
                     onClick={handleSend}
-                    disabled={!input.trim() || loading || !selectedModel}
+                    disabled={!input.trim() || loading || generatingResponse || !selectedModel}
                     sx={{ minWidth: 100 }}
                     startIcon={
-                      loading ? (
+                      loading || generatingResponse ? (
                         <CircularProgress size={20} color="inherit" />
                       ) : (
                         <Send size={20} />
                       )
                     }
                   >
-                    {loading ? "Sending..." : "Send"}
+                    {loading || generatingResponse ? "Sending..." : "Send"}
                   </Button>
                 </Box>
               </Paper>

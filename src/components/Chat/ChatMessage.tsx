@@ -33,7 +33,8 @@ import {
   Repeat, 
   History,
   GitBranch,
-  Clock
+  Clock,
+  Zap
 } from 'lucide-react';
 import { ChatMessage as ChatMessageType } from '../../types';
 import ReactMarkdown from 'react-markdown';
@@ -46,15 +47,16 @@ interface ChatMessageProps {
   isStreaming?: boolean;
   loading?: boolean;
   darkMode?: boolean;
-  onEditMessage?: (content: string, model: string) => void;
-  onRegenerateFromMessage?: (model: string) => void;
+  onEditMessage?: (content: string) => void;
+  onGenerateResponse?: (model: string) => void;
   onSwitchVersion?: (versionNumber: number) => void;
   onViewVersions?: () => void;
   model?: string;
   showHeader?: boolean;
   timestamp?: string;
   messageIndex?: number;
-  canRegenerate?: boolean;
+  canEdit?: boolean;
+  canGenerate?: boolean;
   availableModels?: Array<{ id: string; name: string }>;
 }
 
@@ -64,23 +66,23 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
   loading = false,
   darkMode = false,
   onEditMessage,
-  onRegenerateFromMessage,
+  onGenerateResponse,
   onSwitchVersion,
   onViewVersions,
   model,
   showHeader = false,
   timestamp,
   messageIndex,
-  canRegenerate = false,
+  canEdit = false,
+  canGenerate = false,
   availableModels = [],
 }) => {
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(message.content);
-  const [selectedModel, setSelectedModel] = useState(model || '');
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [versionsDialogOpen, setVersionsDialogOpen] = useState(false);
-  const [regenerateMenuAnchorEl, setRegenerateMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const [generateMenuAnchorEl, setGenerateMenuAnchorEl] = useState<null | HTMLElement>(null);
 
   const copyToClipboard = async () => {
     try {
@@ -99,13 +101,8 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
   };
 
   const handleSave = () => {
-    if (onEditMessage && editedContent !== message.content && selectedModel) {
-      console.log('Saving edited message:', {
-        content: editedContent,
-        model: selectedModel,
-        originalContent: message.content
-      });
-      onEditMessage(editedContent, selectedModel);
+    if (onEditMessage && editedContent !== message.content) {
+      onEditMessage(editedContent);
     }
     setIsEditing(false);
   };
@@ -115,11 +112,11 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
     setEditedContent(message.content);
   };
 
-  const handleRegenerate = (modelId?: string) => {
-    if (onRegenerateFromMessage) {
-      onRegenerateFromMessage(modelId || selectedModel || model || '');
+  const handleGenerate = (modelId?: string) => {
+    if (onGenerateResponse) {
+      onGenerateResponse(modelId || model || '');
     }
-    setRegenerateMenuAnchorEl(null);
+    setGenerateMenuAnchorEl(null);
   };
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -130,13 +127,13 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
     setMenuAnchorEl(null);
   };
 
-  const handleRegenerateMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+  const handleGenerateMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
-    setRegenerateMenuAnchorEl(event.currentTarget);
+    setGenerateMenuAnchorEl(event.currentTarget);
   };
 
-  const handleRegenerateMenuClose = () => {
-    setRegenerateMenuAnchorEl(null);
+  const handleGenerateMenuClose = () => {
+    setGenerateMenuAnchorEl(null);
   };
 
   const handleViewVersions = () => {
@@ -177,7 +174,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
     >
       {/* Version and Edit indicators */}
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 0.5 }}>
-        {message.isEdited && (
+        {message.editInfo?.isEdited && (
           <Chip
             label="Edited"
             size="small"
@@ -349,42 +346,6 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
                 placeholder={message.role === 'user' ? 'Edit your message...' : 'Edit assistant response...'}
               />
               
-              {message.role === 'user' && availableModels.length > 0 && (
-                <TextField
-                  select
-                  fullWidth
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  label="Model for regeneration"
-                  size="small"
-                  sx={{ 
-                    mb: 2,
-                    '& .MuiOutlinedInput-root': {
-                      bgcolor: message.role === 'user' ? 'rgba(255,255,255,0.1)' : 'background.paper',
-                      '& fieldset': {
-                        borderColor: message.role === 'user' ? 'rgba(255,255,255,0.3)' : 'divider',
-                      },
-                    },
-                    '& .MuiInputLabel-root': {
-                      color: message.role === 'user' ? 'rgba(255,255,255,0.7)' : 'text.secondary',
-                    },
-                    '& .MuiSelect-select': {
-                      color: message.role === 'user' ? 'white' : 'text.primary',
-                    },
-                  }}
-                  SelectProps={{
-                    native: true,
-                  }}
-                >
-                  <option value="">Select model</option>
-                  {availableModels.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name}
-                    </option>
-                  ))}
-                </TextField>
-              )}
-              
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
                 <Button
                   size="small"
@@ -407,7 +368,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
                   startIcon={<Save size={16} />}
                   onClick={handleSave}
                   variant="contained"
-                  disabled={!editedContent.trim() || (message.role === 'user' && !selectedModel)}
+                  disabled={!editedContent.trim()}
                   sx={{
                     bgcolor: message.role === 'user' ? 'rgba(255,255,255,0.2)' : 'primary.main',
                     color: message.role === 'user' ? 'white' : 'white',
@@ -416,7 +377,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
                     },
                   }}
                 >
-                  Save & Regenerate
+                  Save
                 </Button>
               </Box>
             </Box>
@@ -478,7 +439,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
           Copy
         </MenuItem>
         
-        {onEditMessage && (
+        {canEdit && message.editInfo?.canEdit && (
           <MenuItem onClick={handleEdit}>
             <Edit size={16} style={{ marginRight: 8 }} />
             Edit
@@ -492,30 +453,30 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
           </MenuItem>
         )}
         
-        {canRegenerate && message.role === 'assistant' && onRegenerateFromMessage && (
-          <MenuItem onClick={handleRegenerateMenuOpen}>
-            <Repeat size={16} style={{ marginRight: 8 }} />
-            Regenerate
+        {canGenerate && message.role === 'user' && onGenerateResponse && (
+          <MenuItem onClick={handleGenerateMenuOpen}>
+            <Zap size={16} style={{ marginRight: 8 }} />
+            Generate Response
           </MenuItem>
         )}
       </Menu>
 
-      {/* Regenerate Model Selection Menu */}
+      {/* Generate Response Model Selection Menu */}
       <Menu
-        anchorEl={regenerateMenuAnchorEl}
-        open={Boolean(regenerateMenuAnchorEl)}
-        onClose={handleRegenerateMenuClose}
+        anchorEl={generateMenuAnchorEl}
+        open={Boolean(generateMenuAnchorEl)}
+        onClose={handleGenerateMenuClose}
         PaperProps={{
           sx: { minWidth: 200 }
         }}
       >
-        <MenuItem onClick={() => handleRegenerate()}>
+        <MenuItem onClick={() => handleGenerate()}>
           <Repeat size={16} style={{ marginRight: 8 }} />
           Same Model
         </MenuItem>
         <Divider />
         {availableModels.map((modelOption) => (
-          <MenuItem key={modelOption.id} onClick={() => handleRegenerate(modelOption.id)}>
+          <MenuItem key={modelOption.id} onClick={() => handleGenerate(modelOption.id)}>
             <Bot size={16} style={{ marginRight: 8 }} />
             {modelOption.name}
           </MenuItem>
@@ -539,7 +500,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
           {message.availableVersions && message.availableVersions.length > 0 ? (
             <List>
               {message.availableVersions.map((version) => (
-                <ListItem key={version.versionId} disablePadding>
+                <ListItem key={version.versionNumber} disablePadding>
                   <ListItemButton
                     selected={version.versionNumber === message.versionNumber}
                     onClick={() => handleSwitchVersion(version.versionNumber)}
@@ -571,7 +532,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
                               overflow: 'hidden',
                             }}
                           >
-                            {version.content}
+                            {version.contentPreview || version.content}
                           </Typography>
                         </Box>
                       }

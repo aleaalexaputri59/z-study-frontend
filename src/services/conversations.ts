@@ -10,7 +10,8 @@ import {
   SwitchVersionResponse,
   ChatVersionsResponse,
   RegenerateResponse,
-  Conversation
+  Conversation,
+  GenerateResponse
 } from '../types';
 
 export const getConversations = async (page = 1, limit = 20): Promise<ConversationsResponse> => {
@@ -52,7 +53,7 @@ export const getConversationChats = async (
   } = {}
 ): Promise<ConversationChatsResponse> => {
   try {
-    const response = await api.get(`/chat/conversation/${conversationId}`, {
+    const response = await api.get(`/conversation/${conversationId}`, {
       params: {
         limit: params.limit || 20,
         lastEvaluatedKey: params.lastEvaluatedKey,
@@ -89,6 +90,31 @@ export const editMessage = async (
   }
 };
 
+export const generateResponse = async (
+  chatId: string,
+  model: string
+): Promise<ReadableStream<Uint8Array>> => {
+  const token = localStorage.getItem("token");
+  
+  const response = await fetch(`${api.defaults.baseURL}/chat/${chatId}/generate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ model }),
+  });
+
+  if (!response.ok) {
+    const error = await response
+      .json()
+      .catch(() => ({ message: "Generate response failed" }));
+    throw new Error(error.message);
+  }
+
+  return response.body!;
+};
+
 export const switchToVersion = async (
   chatId: string,
   data: SwitchVersionRequest
@@ -110,6 +136,7 @@ export const getChatVersions = async (chatId: string): Promise<ChatVersionsRespo
   }
 };
 
+// Legacy function for backward compatibility
 export const regenerateResponse = async (
   chatId: string,
   model: string
@@ -149,7 +176,7 @@ export const getChatHistory = async (
   limit = 20
 ): Promise<ChatHistoryResponse> => {
   try {
-    const response = await api.get(`/chat/conversation/${conversationId}`, {
+    const response = await api.get(`/conversation/${conversationId}`, {
       params: { page, limit },
     });
     return response.data;
