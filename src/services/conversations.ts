@@ -1,7 +1,7 @@
 import api from './api';
-import { 
-  ConversationsResponse, 
-  ChatHistoryResponse, 
+import {
+  ConversationsResponse,
+  ChatHistoryResponse,
   ChatUpdateRequest,
   ConversationChatsResponse,
   EditMessageRequest,
@@ -11,34 +11,47 @@ import {
   ChatVersionsResponse,
   RegenerateResponse,
   Conversation,
-  GenerateResponse
-} from '../types';
+  GenerateResponse,
+} from "../types";
 
-export const getConversations = async (page = 1, limit = 20): Promise<ConversationsResponse> => {
+export const getConversations = async (
+  page = 1,
+  limit = 20
+): Promise<ConversationsResponse> => {
   try {
-    const response = await api.get('/conversations', {
+    const response = await api.get("/conversations", {
       params: { page, limit },
     });
     return response.data;
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || 'Failed to fetch conversations');
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch conversations"
+    );
   }
 };
 
-export const getConversationById = async (conversationId: string): Promise<Conversation> => {
+export const getConversationById = async (
+  conversationId: string
+): Promise<Conversation> => {
   try {
     const response = await api.get(`/conversations/${conversationId}`);
     return response.data.data;
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || 'Failed to fetch conversation');
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch conversation"
+    );
   }
 };
 
-export const deleteConversation = async (conversationId: string): Promise<void> => {
+export const deleteConversation = async (
+  conversationId: string
+): Promise<void> => {
   try {
     await api.delete(`/conversations/${conversationId}`);
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || 'Failed to delete conversation');
+    throw new Error(
+      error.response?.data?.message || "Failed to delete conversation"
+    );
   }
 };
 
@@ -47,25 +60,29 @@ export const getConversationChats = async (
   params: {
     limit?: number;
     lastEvaluatedKey?: string;
-    sortOrder?: 'asc' | 'desc';
+    sortOrder?: "asc" | "desc";
     activeOnly?: boolean;
     currentVersionOnly?: boolean;
+    includeVersions?: boolean;
   } = {}
 ): Promise<ConversationChatsResponse> => {
   try {
-    const response = await api.get(`/conversation/${conversationId}`, {
+    const response = await api.get(`/chat/conversation/${conversationId}`, {
       params: {
         limit: params.limit || 20,
         lastEvaluatedKey: params.lastEvaluatedKey,
-        sortOrder: params.sortOrder || 'asc',
+        sortOrder: params.sortOrder || "asc",
         activeOnly: params.activeOnly !== false,
         currentVersionOnly: params.currentVersionOnly !== false,
-        ...params
+        includeVersions: params.includeVersions || false,
+        ...params,
       },
     });
     return response.data;
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || 'Failed to fetch conversation chats');
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch conversation chats"
+    );
   }
 };
 
@@ -74,20 +91,53 @@ export const getChatById = async (chatId: string) => {
     const response = await api.get(`/chat/${chatId}`);
     return response.data;
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || 'Failed to fetch chat');
+    throw new Error(error.response?.data?.message || "Failed to fetch chat");
   }
 };
 
 export const editMessage = async (
-  chatId: string, 
+  chatId: string,
   data: EditMessageRequest
 ): Promise<EditMessageResponse> => {
   try {
     const response = await api.put(`/chat/${chatId}/edit`, data);
     return response.data;
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || 'Failed to edit message');
+    throw new Error(error.response?.data?.message || "Failed to edit message");
   }
+};
+
+// New function for edit + auto completion
+export const editMessageAndComplete = async (
+  chatId: string,
+  data: {
+    content: string;
+    model: string;
+    autoComplete: boolean;
+  }
+): Promise<ReadableStream<Uint8Array>> => {
+  const token = localStorage.getItem("token");
+
+  const response = await fetch(
+    `${api.defaults.baseURL}/chat/${chatId}/edit-and-complete`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response
+      .json()
+      .catch(() => ({ message: "Edit and complete failed" }));
+    throw new Error(error.message);
+  }
+
+  return response.body!;
 };
 
 export const generateResponse = async (
@@ -95,15 +145,18 @@ export const generateResponse = async (
   model: string
 ): Promise<ReadableStream<Uint8Array>> => {
   const token = localStorage.getItem("token");
-  
-  const response = await fetch(`${api.defaults.baseURL}/chat/${chatId}/generate`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ model }),
-  });
+
+  const response = await fetch(
+    `${api.defaults.baseURL}/chat/${chatId}/generate`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ model }),
+    }
+  );
 
   if (!response.ok) {
     const error = await response
@@ -123,16 +176,31 @@ export const switchToVersion = async (
     const response = await api.post(`/chat/${chatId}/switch-version`, data);
     return response.data;
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || 'Failed to switch version');
+    throw new Error(
+      error.response?.data?.message || "Failed to switch version"
+    );
   }
 };
 
-export const getChatVersions = async (chatId: string): Promise<ChatVersionsResponse> => {
+export const getChatVersions = async (
+  chatId: string,
+  params: {
+    limit?: number;
+    page?: number;
+  } = {}
+): Promise<ChatVersionsResponse> => {
   try {
-    const response = await api.get(`/chat/${chatId}/versions`);
+    const response = await api.get(`/chat/${chatId}/versions`, {
+      params: {
+        limit: params.limit || 10,
+        page: params.page || 1,
+      },
+    });
     return response.data;
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || 'Failed to fetch chat versions');
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch chat versions"
+    );
   }
 };
 
@@ -145,7 +213,9 @@ export const regenerateResponse = async (
     const response = await api.post(`/chat/${chatId}/regenerate`, { model });
     return response.data;
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || 'Failed to regenerate response');
+    throw new Error(
+      error.response?.data?.message || "Failed to regenerate response"
+    );
   }
 };
 
@@ -157,7 +227,7 @@ export const retryChat = async (
     const response = await api.post(`/chat/${chatId}/retry`, { model });
     return response.data;
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || 'Failed to retry chat');
+    throw new Error(error.response?.data?.message || "Failed to retry chat");
   }
 };
 
@@ -165,7 +235,7 @@ export const deleteChat = async (chatId: string): Promise<void> => {
   try {
     await api.delete(`/chat/${chatId}`);
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || 'Failed to delete chat');
+    throw new Error(error.response?.data?.message || "Failed to delete chat");
   }
 };
 
@@ -181,7 +251,9 @@ export const getChatHistory = async (
     });
     return response.data;
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || 'Failed to fetch chat history');
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch chat history"
+    );
   }
 };
 

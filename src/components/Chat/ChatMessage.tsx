@@ -11,15 +11,6 @@ import {
   Divider,
   Menu,
   MenuItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemButton,
-  Badge,
 } from '@mui/material';
 import { 
   Bot, 
@@ -30,11 +21,8 @@ import {
   X, 
   Save, 
   MoreVertical, 
-  Repeat, 
-  History,
   GitBranch,
   Clock,
-  Zap
 } from 'lucide-react';
 import { ChatMessage as ChatMessageType } from '../../types';
 import ReactMarkdown from 'react-markdown';
@@ -66,23 +54,17 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
   loading = false,
   darkMode = false,
   onEditMessage,
-  onGenerateResponse,
-  onSwitchVersion,
-  onViewVersions,
   model,
   showHeader = false,
   timestamp,
   messageIndex,
   canEdit = false,
   canGenerate = false,
-  availableModels = [],
 }) => {
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(message.content);
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
-  const [versionsDialogOpen, setVersionsDialogOpen] = useState(false);
-  const [generateMenuAnchorEl, setGenerateMenuAnchorEl] = useState<null | HTMLElement>(null);
 
   const copyToClipboard = async () => {
     try {
@@ -112,43 +94,12 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
     setEditedContent(message.content);
   };
 
-  const handleGenerate = (modelId?: string) => {
-    if (onGenerateResponse) {
-      onGenerateResponse(modelId || model || '');
-    }
-    setGenerateMenuAnchorEl(null);
-  };
-
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setMenuAnchorEl(event.currentTarget);
   };
 
   const handleMenuClose = () => {
     setMenuAnchorEl(null);
-  };
-
-  const handleGenerateMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    event.stopPropagation();
-    setGenerateMenuAnchorEl(event.currentTarget);
-  };
-
-  const handleGenerateMenuClose = () => {
-    setGenerateMenuAnchorEl(null);
-  };
-
-  const handleViewVersions = () => {
-    setVersionsDialogOpen(true);
-    setMenuAnchorEl(null);
-    if (onViewVersions) {
-      onViewVersions();
-    }
-  };
-
-  const handleSwitchVersion = (versionNumber: number) => {
-    if (onSwitchVersion) {
-      onSwitchVersion(versionNumber);
-    }
-    setVersionsDialogOpen(false);
   };
 
   const formatTimestamp = (dateString?: string) => {
@@ -299,16 +250,6 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
                   {copied ? <Check size={16} /> : <Copy size={16} />}
                 </IconButton>
               </Tooltip>
-              
-              {message.hasMultipleVersions && (
-                <Tooltip title="View versions">
-                  <IconButton size="small" onClick={handleViewVersions}>
-                    <Badge badgeContent={message.totalVersions} color="primary">
-                      <History size={16} />
-                    </Badge>
-                  </IconButton>
-                </Tooltip>
-              )}
 
               <IconButton size="small" onClick={handleMenuOpen}>
                 <MoreVertical size={16} />
@@ -377,7 +318,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
                     },
                   }}
                 >
-                  Save
+                  Save & Generate
                 </Button>
               </Box>
             </Box>
@@ -442,117 +383,10 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
         {canEdit && message.editInfo?.canEdit && (
           <MenuItem onClick={handleEdit}>
             <Edit size={16} style={{ marginRight: 8 }} />
-            Edit
-          </MenuItem>
-        )}
-        
-        {message.hasMultipleVersions && (
-          <MenuItem onClick={handleViewVersions}>
-            <History size={16} style={{ marginRight: 8 }} />
-            View Versions ({message.totalVersions})
-          </MenuItem>
-        )}
-        
-        {canGenerate && message.role === 'user' && onGenerateResponse && (
-          <MenuItem onClick={handleGenerateMenuOpen}>
-            <Zap size={16} style={{ marginRight: 8 }} />
-            Generate Response
+            Edit & Regenerate
           </MenuItem>
         )}
       </Menu>
-
-      {/* Generate Response Model Selection Menu */}
-      <Menu
-        anchorEl={generateMenuAnchorEl}
-        open={Boolean(generateMenuAnchorEl)}
-        onClose={handleGenerateMenuClose}
-        PaperProps={{
-          sx: { minWidth: 200 }
-        }}
-      >
-        <MenuItem onClick={() => handleGenerate()}>
-          <Repeat size={16} style={{ marginRight: 8 }} />
-          Same Model
-        </MenuItem>
-        <Divider />
-        {availableModels.map((modelOption) => (
-          <MenuItem key={modelOption.id} onClick={() => handleGenerate(modelOption.id)}>
-            <Bot size={16} style={{ marginRight: 8 }} />
-            {modelOption.name}
-          </MenuItem>
-        ))}
-      </Menu>
-
-      {/* Versions Dialog */}
-      <Dialog
-        open={versionsDialogOpen}
-        onClose={() => setVersionsDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <GitBranch size={20} />
-            Message Versions
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          {message.availableVersions && message.availableVersions.length > 0 ? (
-            <List>
-              {message.availableVersions.map((version) => (
-                <ListItem key={version.versionNumber} disablePadding>
-                  <ListItemButton
-                    selected={version.versionNumber === message.versionNumber}
-                    onClick={() => handleSwitchVersion(version.versionNumber)}
-                  >
-                    <ListItemText
-                      primary={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            Version {version.versionNumber}
-                          </Typography>
-                          {version.versionNumber === message.versionNumber && (
-                            <Chip label="Current" size="small" color="primary" />
-                          )}
-                        </Box>
-                      }
-                      secondary={
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            <Clock size={12} style={{ marginRight: 4 }} />
-                            {formatTimestamp(version.createdAt)}
-                          </Typography>
-                          <Typography 
-                            variant="body2" 
-                            sx={{ 
-                              mt: 0.5,
-                              display: '-webkit-box',
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: 'vertical',
-                              overflow: 'hidden',
-                            }}
-                          >
-                            {version.contentPreview || version.content}
-                          </Typography>
-                        </Box>
-                      }
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-          ) : (
-            <Typography color="text.secondary" align="center" sx={{ py: 2 }}>
-              No versions available
-            </Typography>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setVersionsDialogOpen(false)}>
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };
