@@ -17,7 +17,7 @@ import {
   User, 
   Copy, 
   Check, 
-  Edit, 
+  Edit3, 
   X, 
   Save, 
   MoreVertical, 
@@ -339,17 +339,17 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
             )}
           </Paper>
 
-          {/* Action buttons at the bottom of the message */}
+          {/* Action buttons at the bottom of the message - ChatGPT style */}
           {!isEditing && (
             <Fade in={true}>
               <Box
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 0.5,
+                  gap: 1,
                   mt: 1,
                   justifyContent: 'flex-start',
-                  opacity: 0.7,
+                  opacity: 0.6,
                   '&:hover': { opacity: 1 },
                   transition: 'opacity 0.2s ease',
                 }}
@@ -360,11 +360,16 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
                     size="small"
                     onClick={copyToClipboard}
                     sx={{
-                      bgcolor: 'background.paper',
-                      boxShadow: 1,
+                      width: 28,
+                      height: 28,
+                      bgcolor: 'transparent',
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      color: 'text.secondary',
                       '&:hover': {
                         bgcolor: 'action.hover',
-                        transform: 'scale(1.05)',
+                        borderColor: 'primary.main',
+                        color: 'primary.main',
                       },
                       transition: 'all 0.2s ease',
                     }}
@@ -373,80 +378,98 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
                   </IconButton>
                 </Tooltip>
 
-                {/* Edit button for user messages */}
+                {/* Edit button for user messages - using pencil icon */}
                 {canEdit && message.editInfo?.canEdit && isUser && (
                   <Tooltip title="Edit message">
                     <IconButton
                       size="small"
                       onClick={handleEdit}
                       sx={{
-                        bgcolor: 'background.paper',
-                        boxShadow: 1,
+                        width: 28,
+                        height: 28,
+                        bgcolor: 'transparent',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        color: 'text.secondary',
                         '&:hover': {
                           bgcolor: 'action.hover',
-                          transform: 'scale(1.05)',
+                          borderColor: 'primary.main',
+                          color: 'primary.main',
                         },
                         transition: 'all 0.2s ease',
                       }}
                     >
-                      <Edit size={14} />
+                      <Edit3 size={14} />
                     </IconButton>
                   </Tooltip>
                 )}
 
-                {/* Version navigation for messages with multiple versions */}
+                {/* Version navigation for messages with multiple versions - ChatGPT style */}
                 {message.hasMultipleVersions && (
-                  <>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                      bgcolor: 'transparent',
+                      '&:hover': {
+                        borderColor: 'primary.main',
+                        bgcolor: 'action.hover',
+                      },
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
                     <Tooltip title="Previous version">
                       <IconButton
                         size="small"
                         sx={{
-                          bgcolor: 'background.paper',
-                          boxShadow: 1,
+                          width: 24,
+                          height: 24,
+                          color: 'text.secondary',
                           '&:hover': {
-                            bgcolor: 'action.hover',
-                            transform: 'scale(1.05)',
+                            color: 'primary.main',
+                            bgcolor: 'transparent',
                           },
-                          transition: 'all 0.2s ease',
                         }}
                       >
-                        <ChevronLeft size={14} />
+                        <ChevronLeft size={12} />
                       </IconButton>
                     </Tooltip>
 
-                    <Box
-                      sx={{
-                        bgcolor: 'background.paper',
-                        px: 1,
-                        py: 0.5,
-                        borderRadius: 1,
-                        boxShadow: 1,
-                        minWidth: '40px',
+                    <Typography 
+                      variant="caption" 
+                      sx={{ 
+                        fontWeight: 600,
+                        color: 'text.secondary',
+                        px: 0.5,
+                        fontSize: '0.75rem',
+                        minWidth: '20px',
                         textAlign: 'center',
                       }}
                     >
-                      <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                        {message.versionNumber}/{message.totalVersions}
-                      </Typography>
-                    </Box>
+                      {message.versionNumber}
+                    </Typography>
 
                     <Tooltip title="Next version">
                       <IconButton
                         size="small"
                         sx={{
-                          bgcolor: 'background.paper',
-                          boxShadow: 1,
+                          width: 24,
+                          height: 24,
+                          color: 'text.secondary',
                           '&:hover': {
-                            bgcolor: 'action.hover',
-                            transform: 'scale(1.05)',
+                            color: 'primary.main',
+                            bgcolor: 'transparent',
                           },
-                          transition: 'all 0.2s ease',
                         }}
                       >
-                        <ChevronRight size={14} />
+                        <ChevronRight size={12} />
                       </IconButton>
                     </Tooltip>
-                  </>
+                  </Box>
                 )}
 
                 {/* Timestamp */}
