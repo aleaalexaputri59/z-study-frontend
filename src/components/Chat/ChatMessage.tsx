@@ -274,7 +274,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
                     },
                   }}
                 >
-                  {message.content}
+                  {String(message.content)}
                 </ReactMarkdown>
               </Box>
             )}

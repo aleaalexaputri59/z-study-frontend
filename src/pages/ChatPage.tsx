@@ -151,51 +151,84 @@ const ChatPage: React.FC = () => {
       });
 
       if (response.success && response.data) {
-        const chatMessages: ChatMessageType[] = response.data.results.map(
-          (chat) => ({
-            chatId: chat.chatId,
-            role: chat.role as "user" | "assistant",
-            content: chat.content,
-            messageIndex: chat.messageIndex,
-            isActive: chat.isActive,
-            
-            // Enhanced versioning support
-            userVersionNumber: chat.userVersionNumber,
-            assistantVersionNumber: chat.assistantVersionNumber,
-            versionNumber: chat.versionNumber, // Legacy support
-            isCurrentVersion: chat.isCurrentVersion,
-            hasMultipleVersions: chat.hasMultipleVersions,
-            totalVersions: chat.totalVersions,
-            linkedUserChatId: chat.linkedUserChatId,
-            originalChatId: chat.originalChatId,
-            
-            editInfo: chat.editInfo,
-            createdAt: chat.createdAt,
-            updatedAt: chat.updatedAt,
-          })
-        );
-
-        if (loadMore) {
-          // Prepend older messages (since we're using desc order)
-          setMessages(prev => [...chatMessages.reverse(), ...prev]);
-        } else {
-          // Initial load - reverse to show chronological order
-          setMessages(chatMessages.reverse());
+        // Check if we got chat messages or conversation metadata
+        if (response.data.results && response.data.results.length > 0) {
+          // Check if the first result has chat message properties
+          const firstResult = response.data.results[0];
           
-          // Set conversation info
+          if (firstResult.role && firstResult.content) {
+            // This is chat messages data
+            const chatMessages: ChatMessageType[] = response.data.results.map(
+              (chat) => ({
+                chatId: chat.chatId,
+                role: chat.role as "user" | "assistant",
+                content: chat.content,
+                messageIndex: chat.messageIndex,
+                isActive: chat.isActive,
+                
+                // Enhanced versioning support
+                userVersionNumber: chat.userVersionNumber,
+                assistantVersionNumber: chat.assistantVersionNumber,
+                versionNumber: chat.versionNumber, // Legacy support
+                isCurrentVersion: chat.isCurrentVersion,
+                hasMultipleVersions: chat.hasMultipleVersions,
+                totalVersions: chat.totalVersions,
+                linkedUserChatId: chat.linkedUserChatId,
+                originalChatId: chat.originalChatId,
+                
+                editInfo: chat.editInfo,
+                createdAt: chat.createdAt,
+                updatedAt: chat.updatedAt,
+              })
+            );
+
+            if (loadMore) {
+              // Prepend older messages (since we're using desc order)
+              setMessages(prev => [...chatMessages.reverse(), ...prev]);
+            } else {
+              // Initial load - reverse to show chronological order
+              setMessages(chatMessages.reverse());
+              
+              // Set conversation info
+              setSelectedConversation({
+                conversationId: convId,
+                title: `Conversation ${convId.slice(0, 8)}...`,
+                lastMessageAt:
+                  chatMessages[chatMessages.length - 1]?.createdAt ||
+                  new Date().toISOString(),
+                createdAt: chatMessages[0]?.createdAt || new Date().toISOString(),
+              });
+            }
+
+            // Update pagination info
+            setHasMoreMessages(response.data.hasMore);
+            setLastEvaluatedKey(response.data.lastEvaluatedKey);
+          } else {
+            // This is conversation metadata, not chat messages
+            console.warn("Received conversation metadata instead of chat messages");
+            setError("No chat messages found for this conversation");
+            setMessages([]);
+            
+            // Set conversation info from metadata
+            const conversationData = firstResult;
+            setSelectedConversation({
+              conversationId: convId,
+              title: conversationData.title || `Conversation ${convId.slice(0, 8)}...`,
+              lastMessageAt: conversationData.lastMessageAt || new Date().toISOString(),
+              createdAt: conversationData.createdAt || new Date().toISOString(),
+            });
+          }
+        } else {
+          // No results found
+          setMessages([]);
           setSelectedConversation({
             conversationId: convId,
             title: `Conversation ${convId.slice(0, 8)}...`,
-            lastMessageAt:
-              chatMessages[chatMessages.length - 1]?.createdAt ||
-              new Date().toISOString(),
-            createdAt: chatMessages[0]?.createdAt || new Date().toISOString(),
+            lastMessageAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
           });
         }
-
-        // Update pagination info
-        setHasMoreMessages(response.data.hasMore);
-        setLastEvaluatedKey(response.data.lastEvaluatedKey);
+        
         setOptimizationInfo(null);
       }
     } catch (error: any) {
